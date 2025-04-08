@@ -7,6 +7,7 @@
       type="text"
       v-model="apiUrl"
       placeholder="輸入 API URL"
+      value="http://localhost:5171/api/csv/clean"
     />
 
     <!-- 其他上傳功能 -->
