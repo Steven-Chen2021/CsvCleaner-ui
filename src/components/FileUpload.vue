@@ -6,13 +6,10 @@
       id="api-url"
       type="text"
       v-model="apiUrl"
-      placeholder="輸入 API URL"
-      value="http://localhost:5171/api/csv/clean"
-    />
+      placeholder="輸入 API URL"/><br />
 
     <!-- 其他上傳功能 -->
-    <input type="file" @change="handleFileUpload" />
-    <button @click="uploadFile">上傳檔案</button>
+    <input type="file" @change="handleFileUpload" /><br />
 
     <div>
       <label>Delimiter:
@@ -22,6 +19,7 @@
           <option value="\t">Tab (\t)</option>
         </select>
       </label>
+      
       <label>
         <input type="checkbox" v-model="hasHeader" /> Has Header
       </label>
@@ -32,7 +30,16 @@
       <h3>Summary</h3>
       <p>Original Rows: {{ summary.originalRowCount }}</p>
       <p>Cleaned Rows: {{ summary.cleanedRowCount }}</p>
-      <p>Headers: {{ summary.standardizedHeaders.join(', ') }}</p>
+      <h4>Corrections:</h4>
+      <ul>
+        <li>Blank Rows Removed: {{ summary.corrections.blankRowsRemoved }}</li>
+        <li>Invalid Emails Corrected: {{ summary.corrections.invalidEmailsCorrected }}</li>
+        <li>Extra Whitespace Trimmed: {{ summary.corrections.extraWhitespaceTrimmed }}</li>
+        <li>Inconsistent Casing Fixed: {{ summary.corrections.inconsistentCasingFixed }}</li>
+        <li>Duplicate Entries Removed: {{ summary.corrections.duplicateEntriesRemoved }}</li>
+        <li>Date Formats Standardized: {{ summary.corrections.dateFormatsStandardized }}</li>
+        <li>Currency Formats Standardized: {{ summary.corrections.currencyFormatsStandardized }}</li>
+      </ul>
       <button @click="downloadCleanedCSV">Download Cleaned CSV</button>
     </div>
   </div>
@@ -42,20 +49,35 @@
 import { ref } from 'vue';
 import axios from 'axios';
 
-const apiUrl = ref(import.meta.env.VITE_API_BASE_URL || ""); // 預設為 .env 中的值
+// 使用 ref 並設定預設值
+const apiUrl = ref(import.meta.env.VITE_API_BASE_URL || "http://localhost:5171");
 const file = ref(null);
 const delimiter = ref(',');
 const hasHeader = ref(true);
 const loading = ref(false);
-const summary = ref(null);
-const downloadUrl = ref('');
+const summary = ref(null); // Initialize as null to hide the summary initially
 
 const handleFileUpload = (event) => {
-  file.value = event.target.files[0];
+  const uploadedFile = event.target.files[0];
+  if (uploadedFile && uploadedFile.type !== 'text/csv') {
+    alert("請選擇 CSV 檔案");
+    event.target.value = ''; // Reset the file input
+    file.value = null;
+  } else {
+    file.value = uploadedFile;
+  }
 };
 
 const submitFile = async () => {
-  if (!file.value) return;
+  if (!file.value) {
+    alert("請選擇檔案");
+    return;
+  }
+  if (!apiUrl.value) {
+    alert("請輸入有效的 API URL");
+    return;
+  }
+
   loading.value = true;
   const formData = new FormData();
   formData.append('file', file.value);
@@ -66,44 +88,35 @@ const submitFile = async () => {
     const response = await axios.post(`${apiUrl.value}/api/csv/clean`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
-    summary.value = response.data;
-    downloadUrl.value = response.data.downloadUrl;
+    console.log('Before summary:', summary.value);
+    
+    summary.value = {
+      originalRowCount: response.data.originalRowCount,
+      cleanedRowCount: response.data.cleanedRowCount,
+      corrections: response.data.corrections,
+      downloadUrl: response.data.downloadUrl, // 更新 downloadUrl
+    };
+    console.log('After summary:',summary.value);
+    alert("清理成功");
+    
   } catch (err) {
-    alert('Failed to clean CSV.');
+    alert("清理失敗");
+    console.error(err);
   } finally {
     loading.value = false;
   }
 };
 
 const downloadCleanedCSV = async () => {
-  const response = await axios.get(downloadUrl.value, { responseType: 'blob' });
-  const blob = new Blob([response.data], { type: 'text/csv' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = 'cleaned.csv';
-  link.click();
-};
-
-const uploadFile = async () => {
-  if (!apiUrl.value) {
-    alert("請輸入有效的 API URL");
-    return;
-  }
-  if (!file.value) {
-    alert("請選擇檔案");
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append("file", file.value);
-
-  try {
-    const response = await axios.post(`${apiUrl.value}/api/csv/clean`, formData);
-    alert("檔案清理成功");
-    console.log(response.data);
-  } catch (error) {
-    alert("檔案清理失敗");
-    console.error(error);
-  }
+    if (!summary.value.downloadUrl) {
+        alert('Download URL is not available.');
+        return;
+    }
+    const response = await axios.get(summary.value.downloadUrl, { responseType: 'blob' });
+    const blob = new Blob([response.data], { type: 'text/csv' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'cleaned.csv';
+    link.click();
 };
 </script>
